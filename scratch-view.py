@@ -96,11 +96,14 @@ class MainWindow(QMainWindow):
         self.enableSetZeroAction.setCheckable(True)
         self.enableSetZeroAction.toggled.connect(self.enableSetZero)
 
+        self.viewer.mousePositionOnImageChanged.connect(self.printPos)
+
     def enableSetZero(self, enable):
         if enable:
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
             self.viewer.middleMouseButtonReleased.connect(self.setZero)
         else:
+            self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
             self.viewer.middleMouseButtonReleased.disconnect()
 
     def setZero(self, x, y):
@@ -110,8 +113,21 @@ class MainWindow(QMainWindow):
             r = 25
             self.zeroEllipse = self.viewer.scene.addEllipse(
                 x-r, y-r, 2*r, 2*r, pen=0, brush=QColor("#FFD141"))
+
+            self.enableSetZeroAction.toggle()
         except Exception as e:
             print(e)
+
+    def printPos(self, point):
+        if self.zeroEllipse:
+            try:
+                x, y = self._mapToum(point.x(), point.y())
+                self.status.showMessage(f"x={x}, y={y}")
+            except Exception as e:
+                print(e)
+
+    def _mapToum(self, x, y):
+        return round(self.scale * x), round(self.scale * y)
 
 
 class Plot(QWidget):
@@ -163,8 +179,8 @@ class Plot(QWidget):
         l = len(df.x[df.x == 0.]) - 1
         df = df[l:]
         self.ax.cla()
-        self.ax.plot(df.x/256, df.fIn/1000, "b")
-        self.ax.plot(df.x/256, df.fSet/1000, "--", color="gray")
+        self.ax.plot(df.x/25.6, df.fIn/1000, "b")
+        self.ax.plot(df.x/25.6, df.fSet/1000, "--", color="gray")
         self.figureCanvas.draw()
         self.figure.tight_layout()
 
@@ -286,7 +302,7 @@ class QtImageViewer(QGraphicsView):
         self._scenePosition = QPointF()
 
         # Track mouse position. e.g., For displaying coordinates in a UI.
-        # self.setMouseTracking(True)
+        self.setMouseTracking(True)
 
         # ROIs.
         self.ROIs = []
