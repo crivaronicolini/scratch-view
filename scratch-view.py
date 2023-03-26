@@ -8,6 +8,7 @@ import os.path
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 # plt.use('QtAgg')
 
 try:
@@ -122,7 +123,8 @@ class MainWindow(QMainWindow):
         if self.zeroEllipse:
             try:
                 x, y = self._mapToum(point.x(), point.y())
-                self.status.showMessage(f"x={x}, y={y}")
+                fIn = self.plot.getfIn(x)
+                self.status.showMessage(f"x={x}, y={y}   F={fIn:.2f}N")
             except Exception as e:
                 print(e)
 
@@ -176,13 +178,21 @@ class Plot(QWidget):
         # TODO setear escala bien
         if df.x.mean() < -1:
             df.x = - df.x
+        # saco el acercamiento y estabilizacion
         l = len(df.x[df.x == 0.]) - 1
-        df = df[l:]
+        df.drop(df[:l].index, inplace=True)
+        df['um'] = df.x/25.6
+        df.fIn = df.fIn/1000
+        df.fSet = df.fSet/1000
         self.ax.cla()
-        self.ax.plot(df.x/25.6, df.fIn/1000, "b")
-        self.ax.plot(df.x/25.6, df.fSet/1000, "--", color="gray")
+        self.ax.plot(df.um, df.fIn, "b")
+        self.ax.plot(df.um, df.fSet, "--", color="gray")
         self.figureCanvas.draw()
         self.figure.tight_layout()
+
+    def getfIn(self, x):
+        idx = np.searchsorted(self.df.um, x, side='left')
+        return self.df.fIn[idx]
 
 
 class QtImageViewer(QGraphicsView):
