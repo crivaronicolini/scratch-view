@@ -4,7 +4,8 @@
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
-import os.path
+from pathlib import Path
+
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -16,7 +17,7 @@ try:
     from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
     from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor
     from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-        QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem
+        QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel
 except ImportError:
     try:
         from PyQt5.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
@@ -51,8 +52,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("aber")
         self.viewer = QtImageViewer()
         self.plot = Plot()
+        self.label = QLabel('hola')
+        f = self.label.font()
+        f.setPointSize(15)
+        self.label.setFont(f)
+        self.label.setFont(self.label.font())
+        self.label.setAlignment(Qt.AlignmentFlag.AlignHCenter |
+                                Qt.AlignmentFlag.AlignVCenter)
         widget = QWidget()
         layout = QVBoxLayout()
+        layout.addWidget(self.label)
         layout.addWidget(self.viewer)
         layout.addWidget(self.plot)
         widget.setLayout(layout)
@@ -99,6 +108,8 @@ class MainWindow(QMainWindow):
 
         self.viewer.mousePositionOnImageChanged.connect(self.printPos)
 
+        self.viewer.setTitleAction.connect(self.setTitle)
+
     def enableSetZero(self, enable):
         if enable:
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
@@ -131,6 +142,9 @@ class MainWindow(QMainWindow):
     def _mapToum(self, x, y):
         return round(self.scale * x), round(self.scale * y)
 
+    def setTitle(self, title):
+        self.label.setText(title)
+
 
 class Plot(QWidget):
 
@@ -160,7 +174,8 @@ class Plot(QWidget):
         # TODO poner solo csv
         try:
             self.df = pd.read_csv(filepath)
-            self.plot(self.df)
+            title = Path(filepath).name
+            self.plot(self.df, title)
         except Exception as e:
             print(e)
 
@@ -170,11 +185,12 @@ class Plot(QWidget):
         try:
             filepath, _ = QFileDialog.getOpenFileName(self, "Abrir csv")
             self.df = pd.read_csv(filepath)
-            self.plot(self.df)
+            title = Path(filepath).name
+            self.plot(self.df, title)
         except Exception as e:
             print(e)
 
-    def plot(self, df):
+    def plot(self, df, title):
         # TODO setear escala bien
         if df.x.mean() < -1:
             df.x = - df.x
@@ -187,6 +203,7 @@ class Plot(QWidget):
         self.ax.cla()
         self.ax.plot(df.um, df.fIn, "b")
         self.ax.plot(df.um, df.fSet, "--", color="gray")
+        self.ax.set_title(title)
         self.figureCanvas.draw()
         self.figure.tight_layout()
 
@@ -261,6 +278,8 @@ class QtImageViewer(QGraphicsView):
 
     # Emit index of selected ROI
     roiSelected = pyqtSignal(int)
+
+    setTitleAction = pyqtSignal(str)
 
     def __init__(self):
         QGraphicsView.__init__(self)
@@ -404,11 +423,15 @@ class QtImageViewer(QGraphicsView):
         """
         if filepath is None:
             filepath, _ = QFileDialog.getOpenFileName(self, "Open image file.")
-        if len(filepath) and os.path.isfile(filepath):
+        if Path.is_file(path := Path(filepath)):
             if self.hasImage():
                 self.clearImage()
             image = QImage(filepath)
             self.setImage(image)
+            self.setTitle(path.name)
+
+    def setTitle(self, title):
+        self.setTitleAction.emit(title)
 
     def updateViewer(self):
         """ Show current zoom (if showing entire image, apply current aspect ratio mode).
