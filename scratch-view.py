@@ -3,29 +3,20 @@
 """
 
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from pathlib import Path
+import subprocess
+import platform
 
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-# plt.use('QtAgg')
 
-try:
-    # from PyQt6.QtCharts import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
-    from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
-    from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor
-    from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-        QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel
-except ImportError:
-    try:
-        from PyQt5.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
-        from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen
-        from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-            QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem
-    except ImportError:
-        raise ImportError("Requires PyQt (version 5 or 6)")
+from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, QProcess
+from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor
+from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
+    QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel
 
 # numpy is optional: only needed if you want to display numpy 2d arrays as images.
 try:
@@ -76,6 +67,8 @@ class MainWindow(QMainWindow):
         self.status = self.statusBar()
         self.status.showMessage("Data loaded and plotted")
 
+        self.p = None
+
         # TODO hacer configurable
         self.scale = 0.44  # px/um
 
@@ -89,6 +82,7 @@ class MainWindow(QMainWindow):
         fileMenu = menuBar.addMenu("Archivo")
         fileMenu.addAction(self.newCSVAction)
         fileMenu.addAction(self.newIMGAction)
+        fileMenu.addAction(self.newStitchAction)
 
     def _createToolBars(self):
         mainToolBar = QToolBar("Main", self)
@@ -102,12 +96,14 @@ class MainWindow(QMainWindow):
         self.newCSVAction = QAction("Abrir csv", self)
         self.newCSVAction.triggered.connect(self.plot.open)
 
+        self.newStitchAction = QAction("Juntar imagenes", self)
+        self.newStitchAction.triggered.connect(self.juntarImagenes)
+
         self.enableSetZeroAction = QAction("Elegir origen", self)
         self.enableSetZeroAction.setCheckable(True)
         self.enableSetZeroAction.toggled.connect(self.enableSetZero)
 
         self.viewer.mousePositionOnImageChanged.connect(self.printPos)
-
         self.viewer.setTitleAction.connect(self.setTitle)
 
     def enableSetZero(self, enable):
@@ -145,6 +141,65 @@ class MainWindow(QMainWindow):
     def setTitle(self, title):
         self.label.setText(title)
 
+    def _whichFiji(self):
+        p = platform.system()
+        if p == 'Linux':
+            # return subprocess.run(["which", "fiji"])
+            return "fiji"
+        if p == 'Windows':
+            # TODO
+            return
+        return
+
+    def juntarImagenes(self):
+        """Da para elegir una carpeta y corre una macro de Fiji sobre las imagenes de esa carpeta.
+        Guarda el resultado con el nombre de la carpeta"""
+        if not self.p:
+            try:
+                fiji = self._whichFiji()
+                directory = QFileDialog.getExistingDirectory(
+                    self, "Abrir carpeta de imagenes")
+                directory = Path(directory).resolve()
+
+                self.directory_juntadas = directory
+                self.files_juntadas = sorted(Path.iterdir(directory))
+                self.csv_juntadas = [f for f in self.files_juntadas if f.name.endswith('csv')]
+                imgs = [f for f in self.files_juntadas if f.name.endswith('jpg')]
+
+                if imgs[0].stem != '1':
+                    # TODO convertir los archivos a 1 2 3...
+                    pass
+
+                x = len(imgs)
+                y = 1
+                overlap = 20
+
+                # si está el csv de la medición uso eso como nombre de archivo
+                if self.csv_juntadas:
+                    self.outpath = ''.join(
+                        [str(directory.parent / self.csv_juntadas[0].stem), '.jpg'])
+                else:
+                    self.outpath = ''.join(
+                        [str(directory.parent / directory.name), '.jpg'])
+
+                self.status.showMessage('Uniendo imagenes')
+                self.p = QProcess()
+                self.p.finished.connect(self.p_finished)
+
+                print('hola')
+
+                self.p.start(fiji, ["--headless", "--run", "stitch-macro.py",
+                             f'{x=},{y=},{overlap=},directory="{str(directory)}",outpath="{self.outpath}"'])
+            except Exception as e:
+                print(e)
+
+    def p_finished(self):
+        self.status.showMessage(f'Imagen guardada en {self.outpath}')
+        self.viewer.open(self.outpath)
+        if self.csv_juntadas:
+            self.plot.open(self.csv_juntadas[0])
+        self.p = None
+
 
 class Plot(QWidget):
 
@@ -157,8 +212,6 @@ class Plot(QWidget):
         self.figureCanvas = FigureCanvasQTAgg(self.figure)
         self.navigationToolbar = NavigationToolbar(self.figureCanvas, self)
 
-        # TODO cambiar
-        # create main layout
         layout = QVBoxLayout()
         layout.addWidget(self.navigationToolbar)
         layout.addWidget(self.figureCanvas)
@@ -169,23 +222,14 @@ class Plot(QWidget):
         # show canvas
         self.figureCanvas.show()
 
-    def openfile(self, filepath):
+    def open(self, filepath):
         """Open file picker to open csv """
         # TODO poner solo csv
         try:
+            if not filepath:
+                filepath, _ = QFileDialog.getOpenFileName(self, "Abrir csv", "", "Spreadsheet files (*.csv *.tsv *.xlx)")
             self.df = pd.read_csv(filepath)
-            title = Path(filepath).name
-            self.plot(self.df, title)
-        except Exception as e:
-            print(e)
-
-    def open(self):
-        """Open file picker to open csv """
-        # TODO poner solo csv
-        try:
-            filepath, _ = QFileDialog.getOpenFileName(self, "Abrir csv")
-            self.df = pd.read_csv(filepath)
-            title = Path(filepath).name
+            title = Path(filepath.name)
             self.plot(self.df, title)
         except Exception as e:
             print(e)
@@ -204,7 +248,7 @@ class Plot(QWidget):
         self.ax.plot(df.um, df.fIn, "b")
         self.ax.plot(df.um, df.fSet, "--", color="gray")
         self.ax.set_title(title)
-        self.figureCanvas.draw()
+        self.figureCanvas.draw_idle()
         self.figure.tight_layout()
 
     def getfIn(self, x):
@@ -422,7 +466,7 @@ class QtImageViewer(QGraphicsView):
         With a fileName argument, loadImageFromFile(fileName) will attempt to load the specified image file directly.
         """
         if filepath is None:
-            filepath, _ = QFileDialog.getOpenFileName(self, "Open image file.")
+            filepath, _ = QFileDialog.getOpenFileName(self, "Open image file.", "", "Image Files (*.png *.jpg *.bmp)")
         if Path.is_file(path := Path(filepath)):
             if self.hasImage():
                 self.clearImage()
@@ -855,7 +899,7 @@ if __name__ == '__main__':
     img = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/5-60.jpg"
     csv = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/M1402_5-60_1.csv"
     viewer.open(img)
-    mainwindow.plot.openfile(csv)
+    mainwindow.plot.open(csv)
 
     # Handle left mouse clicks with your own custom slot
     # handleLeftClick(x, y). (x, y) are image coordinates.
