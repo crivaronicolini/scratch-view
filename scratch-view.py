@@ -7,6 +7,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolb
 from pathlib import Path
 import subprocess
 import platform
+import traceback
 
 
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ import numpy as np
 from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, QProcess
 from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor
 from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-    QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel
+    QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel, QMessageBox
 
 # numpy is optional: only needed if you want to display numpy 2d arrays as images.
 try:
@@ -35,6 +36,12 @@ except ImportError:
 
 __author__ = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
 __version__ = '2.0.0'
+
+
+def errorDialog(parent, title, message):
+    print(message)
+    QMessageBox.critical(parent, str(title), message)
+    return
 
 
 class MainWindow(QMainWindow):
@@ -121,21 +128,27 @@ class MainWindow(QMainWindow):
             r = 25
             self.zeroEllipse = self.viewer.scene.addEllipse(
                 x-r, y-r, 2*r, 2*r, pen=0, brush=QColor("#FFD141"))
+            self.zeroEllipsePos = QPointF(round(x-r), round(y-r))
 
             self.enableSetZeroAction.toggle()
         except Exception as e:
+            # pass
+            errorDialog(self, e, traceback.format_exc())
             print(e)
 
     def printPos(self, point):
         if self.zeroEllipse:
             try:
-                x, y = self._mapToum(point.x(), point.y())
+                x, y = self._mapToum(QPointF(point) - self.zeroEllipsePos)
                 fIn = self.plot.getfIn(x)
                 self.status.showMessage(f"x={x}, y={y}   F={fIn:.2f}N")
             except Exception as e:
+                errorDialog(self, e, traceback.format_exc())
                 print(e)
+                # pass
 
-    def _mapToum(self, x, y):
+    def _mapToum(self, point):
+        x, y = point.x(), point.y()
         return round(self.scale * x), round(self.scale * y)
 
     def setTitle(self, title):
@@ -193,7 +206,7 @@ class MainWindow(QMainWindow):
                 self.p.start(fiji, ["--headless", "--run", "stitch-macro.py",
                              f'{x=},{y=},{overlap=},directory="{str(directory)}",outpath="{self.outpath}"'])
             except Exception as e:
-                print(e)
+                errorDialog(self, e, traceback.format_exc())
 
     def p_finished(self):
         self.status.showMessage(f'Imagen guardada en {self.outpath}')
@@ -733,11 +746,11 @@ class QtImageViewer(QGraphicsView):
             # Pixel index offset from pixel center.
             x = int(round(scenePos.x() - 0.5))
             y = int(round(scenePos.y() - 0.5))
-            imagePos = QPoint(x, y)
+            self.imagePos = QPoint(x, y)
         else:
             # Invalid pixel position.
-            imagePos = QPoint(-1, -1)
-        self.mousePositionOnImageChanged.emit(imagePos)
+            self.imagePos = QPoint(-1, -1)
+        self.mousePositionOnImageChanged.emit(self.imagePos)
 
         QGraphicsView.mouseMoveEvent(self, event)
 
@@ -767,7 +780,6 @@ class QtImageViewer(QGraphicsView):
         for i in range(len(self.ROIs)):
             if roi is self.ROIs[i]:
                 self.roiSelected.emit(i)
-                print(i)
                 break
 
     def setROIsAreMovable(self, tf):
@@ -867,6 +879,19 @@ if __name__ == '__main__':
 
     def handleViewChange():
         print("viewChanged")
+
+    def my_exception_hook(exctype, value, traceback):
+        # Print the error and traceback
+        print(exctype, value, traceback)
+        # Call the normal Exception hook after
+        sys._excepthook(exctype, value, traceback)
+        sys.exit(1)
+
+    # Back up the reference to the exceptionhook
+    sys._excepthook = sys.excepthook
+
+    # Set the exception hook to our wrapping function
+    sys.excepthook = my_exception_hook
 
     # Create the QApplication.
     app = QApplication(sys.argv)
