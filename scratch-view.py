@@ -163,8 +163,10 @@ class MainWindow(QMainWindow):
 
                 self.directory_juntadas = directory
                 self.files_juntadas = sorted(Path.iterdir(directory))
-                self.csv_juntadas = [f for f in self.files_juntadas if f.name.endswith('csv')]
-                imgs = [f for f in self.files_juntadas if f.name.endswith('jpg')]
+                self.csv_juntadas = [
+                    f for f in self.files_juntadas if f.name.endswith('csv')]
+                imgs = [
+                    f for f in self.files_juntadas if f.name.endswith('jpg')]
 
                 if imgs[0].stem != '1':
                     # TODO convertir los archivos a 1 2 3...
@@ -219,41 +221,49 @@ class Plot(QWidget):
 
         self.ax = self.figure.add_subplot(111)
 
-        # show canvas
         self.figureCanvas.show()
 
     def open(self, filepath):
         """Open file picker to open csv """
-        # TODO poner solo csv
         try:
             if not filepath:
-                filepath, _ = QFileDialog.getOpenFileName(self, "Abrir csv", "", "Spreadsheet files (*.csv *.tsv *.xlx)")
+                filepath, _ = QFileDialog.getOpenFileName(
+                    self, "Abrir csv", "", "Spreadsheet files (*.csv *.tsv *.xlx)")
+                filepath = Path(filepath).resolve()
             self.df = pd.read_csv(filepath)
-            title = Path(filepath.name)
-            self.plot(self.df, title)
+            title = filepath.name
+            self.ajustardf()
+            self.plot(title)
         except Exception as e:
-            print(e)
+            errorDialog(self, e, traceback.format_exc())
 
-    def plot(self, df, title):
+    def ajustardf(self):
+        df = self.df
         # TODO setear escala bien
         if df.x.mean() < -1:
             df.x = - df.x
         # saco el acercamiento y estabilizacion
         l = len(df.x[df.x == 0.]) - 1
-        df.drop(df[:l].index, inplace=True)
+        df = df.drop(df[:l].index).reset_index(drop=True)
         df['um'] = df.x/25.6
         df.fIn = df.fIn/1000
         df.fSet = df.fSet/1000
+        self.df = df
+
+    def plot(self, title):
         self.ax.cla()
-        self.ax.plot(df.um, df.fIn, "b")
-        self.ax.plot(df.um, df.fSet, "--", color="gray")
+        self.ax.plot(self.df.um, self.df.fIn, "b")
+        self.ax.plot(self.df.um, self.df.fSet, "--", color="gray")
         self.ax.set_title(title)
         self.figureCanvas.draw_idle()
         self.figure.tight_layout()
 
     def getfIn(self, x):
-        idx = np.searchsorted(self.df.um, x, side='left')
-        return self.df.fIn[idx]
+        try:
+            idx = np.searchsorted(self.df['um'], x, side='left')
+            return self.df.fIn[idx]
+        except ValueError:
+            return 0
 
 
 class QtImageViewer(QGraphicsView):
@@ -460,19 +470,20 @@ class QtImageViewer(QGraphicsView):
         self.setSceneRect(QRectF(pixmap.rect()))
         self.updateViewer()
 
-    def open(self, filepath="/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/5-60.jpg"):
+    def open(self, filepath=None):
         """ Load an image from file.
         Without any arguments, loadImageFromFile() will pop up a file dialog to choose the image file.
         With a fileName argument, loadImageFromFile(fileName) will attempt to load the specified image file directly.
         """
-        if filepath is None:
-            filepath, _ = QFileDialog.getOpenFileName(self, "Open image file.", "", "Image Files (*.png *.jpg *.bmp)")
-        if Path.is_file(path := Path(filepath)):
-            if self.hasImage():
-                self.clearImage()
-            image = QImage(filepath)
-            self.setImage(image)
-            self.setTitle(path.name)
+        if not filepath:
+            filepath, _ = QFileDialog.getOpenFileName(
+                self, "Open image file.", "", "Image Files (*.png *.jpg *.bmp)")
+            filepath = Path(filepath).resolve()
+        if self.hasImage():
+            self.clearImage()
+        image = QImage(str(filepath))
+        self.setImage(image)
+        self.setTitle(filepath.name)
 
     def setTitle(self, title):
         self.setTitleAction.emit(title)
@@ -898,8 +909,8 @@ if __name__ == '__main__':
     # Load an image file to be displayed (will popup a file dialog).
     img = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/5-60.jpg"
     csv = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/M1402_5-60_1.csv"
-    viewer.open(img)
-    mainwindow.plot.open(csv)
+    viewer.open(Path(img))
+    mainwindow.plot.open(Path(csv))
 
     # Handle left mouse clicks with your own custom slot
     # handleLeftClick(x, y). (x, y) are image coordinates.
