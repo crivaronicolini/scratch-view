@@ -102,22 +102,25 @@ class MainWindow(QMainWindow):
     def enableSetZero(self, enable):
         if enable:
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
-            self.viewer.leftMouseButtonReleased.connect(self.setZero)
+            self.viewer.middleMouseButtonReleased.connect(self.setZero)
         else:
             self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
-            self.viewer.leftMouseButtonReleased.disconnect(self.setZero)
+            self.viewer.middleMouseButtonReleased.disconnect(self.setZero)
 
     def enableMarcarLinea(self, enable):
         if enable:
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
+            self.viewer.settingZero = True
             self.viewer.mousePositionOnImageChanged.connect(
                 self.plot.mostrarLinea)
+            self.viewer.drawROI = 'Line'
             self.viewer.leftMouseButtonReleased.connect(self.marcarLinea)
         else:
             self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
             self.viewer.leftMouseButtonReleased.disconnect(self.marcarLinea)
             self.viewer.mousePositionOnImageChanged.disconnect(
                 self.plot.mostrarLinea)
+            self.viewer.drawROI = None
 
     def setZero(self, x, y):
         if self.zeroEllipse:
@@ -501,6 +504,8 @@ class QtImageViewer(QGraphicsView):
         self.panButton = Qt.MouseButton.MiddleButton  # Drag to pan.
         # Set to None or 1 to disable mouse wheel zoom.
         self.wheelZoomFactor = 1.25
+        # Button to add ROIs when option is enabled
+        self.addROIsButton = Qt.MouseButton.RightButton
 
         # Stack of QRectF zoom boxes in scene coordinates.
         # !!! If you update this manually, be sure to call updateViewer() to reflect any changes.
@@ -521,7 +526,8 @@ class QtImageViewer(QGraphicsView):
         self.ROIs = []
 
         # # For drawing ROIs.
-        # self.drawROI = None
+        self.drawROI = None
+        self.settingZero = False
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
@@ -591,6 +597,9 @@ class QtImageViewer(QGraphicsView):
         else:
             self._image = self.scene.addPixmap(pixmap)
 
+        self._image.height = self._image.pixmap().height()
+        self._image.width = self._image.pixmap().width()
+
         # Better quality pixmap scaling?
         # !!! This will distort actual pixel data when zoomed way in.
         #     For scientific image analysis, you probably don't want this.
@@ -651,21 +660,6 @@ class QtImageViewer(QGraphicsView):
             QGraphicsView.mousePressEvent(self, event)
             event.accept()
             return
-
-        # # Draw ROI
-        # if self.drawROI is not None:
-        #     if self.drawROI == "Ellipse":
-        #         # Click and drag to draw ellipse. +Shift for circle.
-        #         pass
-        #     elif self.drawROI == "Rect":
-        #         # Click and drag to draw rectangle. +Shift for square.
-        #         pass
-        #     elif self.drawROI == "Line":
-        #         # Click and drag to draw line.
-        #         pass
-        #     elif self.drawROI == "Polygon":
-        #         # Click to add points to polygon. Double-click to close polygon.
-        #         pass
 
         # Start dragging a region zoom box?
         if (self.regionZoomButton is not None) and (event.button() == self.regionZoomButton):
@@ -729,6 +723,24 @@ class QtImageViewer(QGraphicsView):
             event.accept()
             return
 
+        scenePos = self.mapToScene(event.pos())
+
+        # Draw ROI
+        if (self.drawROI is not None) and (event.button() == self.addROIsButton):
+            if self.drawROI == "Ellipse":
+                # Click and drag to draw ellipse. +Shift for circle.
+                pass
+            elif self.drawROI == "Rect":
+                # Click and drag to draw rectangle. +Shift for square.
+                pass
+            elif self.drawROI == "Line":
+                # Click and drag to draw line.
+                self.addLine(scenePos.x())
+            elif self.drawROI == "Polygon":
+                # Click to add points to polygon. Double-click to close polygon.
+                pass
+            return
+
         # Finish dragging a region zoom box?
         if (self.regionZoomButton is not None) and (event.button() == self.regionZoomButton):
             QGraphicsView.mouseReleaseEvent(self, event)
@@ -776,7 +788,7 @@ class QtImageViewer(QGraphicsView):
             self._isPanning = False
             return
 
-        scenePos = self.mapToScene(event.pos())
+        # scenePos = self.mapToScene(event.pos())
         if event.button() == Qt.MouseButton.LeftButton:
             self.leftMouseButtonReleased.emit(scenePos.x(), scenePos.y())
         elif event.button() == Qt.MouseButton.MiddleButton:
@@ -983,9 +995,15 @@ class QtImageViewer(QGraphicsView):
                 roi.setFlags(roi.flags() & ~
                              QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
 
-    def addSpots(self, xy, radius):
-        for xy_ in xy:
-            x, y = xy_
+    def addLine(self, x):
+        line = LineROI(self)
+        line.setLine(x, 0, x, self._image.height)
+        self.scene.addItem(line)
+        self.ROIs.append(line)
+
+    def addSpots(self, points, radius):
+        for point in points:
+            x, y = point
             spot = EllipseROI(self)
             spot.setRect(x - radius, y - radius, 2 * radius, 2 * radius)
             self.scene.addItem(spot)
@@ -997,7 +1015,7 @@ class EllipseROI(QGraphicsEllipseItem):
     def __init__(self, viewer):
         QGraphicsItem.__init__(self)
         self._viewer = viewer
-        pen = QPen(Qt.yellow)
+        pen = QPen(Qt.GlobalColor.yellow)
         pen.setCosmetic(True)
         self.setPen(pen)
         self.setFlags(self.GraphicsItemFlag.ItemIsSelectable)
@@ -1114,7 +1132,8 @@ if __name__ == '__main__':
     viewer.regionZoomButton = None  # set to None to disable
 
     # Pop end of zoom stack (double click clears zoom stack).
-    viewer.zoomOutButton = Qt.MouseButton.RightButton  # set to None to disable
+    # viewer.zoomOutButton = Qt.MouseButton.RightButton  # set to None to disable
+    viewer.zoomOutButton = None  # set to None to disable
 
     # Mouse wheel zooming.
     viewer.wheelZoomFactor = 1.25  # Set to None or 1 to disable
@@ -1128,6 +1147,8 @@ if __name__ == '__main__':
     viewer.open(Path(img))
     mainwindow.plot.open(Path(csv))
 
+    viewer.addSpots([(100, 100)], 100)
+    viewer.addLine(1000)
     # Handle left mouse clicks with your own custom slot
     # handleLeftClick(x, y). (x, y) are image coordinates.
     # For (row, col) matrix indexing, row=y and col=x.
