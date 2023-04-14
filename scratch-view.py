@@ -2,10 +2,9 @@
 
 """
 
-from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backend_tools import Cursors
 from pathlib import Path
-import subprocess
 import platform
 import traceback
 
@@ -18,24 +17,6 @@ from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize,
 from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor
 from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
     QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel, QMessageBox
-
-# numpy is optional: only needed if you want to display numpy 2d arrays as images.
-try:
-    import numpy as np
-except ImportError:
-    np = None
-
-# qimage2ndarray is optional: useful for displaying numpy 2d arrays as images.
-# !!! qimage2ndarray requires PyQt5.
-#     Some custom code in the viewer appears to handle the conversion from numpy 2d arrays,
-#     so qimage2ndarray probably is not needed anymore. I've left it here just in case.
-try:
-    import qimage2ndarray
-except ImportError:
-    qimage2ndarray = None
-
-__author__ = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
-__version__ = '2.0.0'
 
 
 def errorDialog(parent, title, message):
@@ -87,28 +68,33 @@ class MainWindow(QMainWindow):
         menuBar = self.menuBar()
         # File menu
         fileMenu = menuBar.addMenu("Archivo")
-        fileMenu.addAction(self.newCSVAction)
-        fileMenu.addAction(self.newIMGAction)
+        fileMenu.addAction(self.newFileAction)
         fileMenu.addAction(self.newStitchAction)
 
     def _createToolBars(self):
         mainToolBar = QToolBar("Main", self)
         self.addToolBar(mainToolBar)
         mainToolBar.addAction(self.enableSetZeroAction)
+        mainToolBar.addAction(self.enableMarcarLineaAction)
 
     def _createActions(self):
-        self.newIMGAction = QAction("Abrir imagen", self)
-        self.newIMGAction.triggered.connect(self.viewer.open)
-
-        self.newCSVAction = QAction("Abrir csv", self)
-        self.newCSVAction.triggered.connect(self.plot.open)
+        self.newFileAction = QAction("Abrir archivos", self)
+        self.newFileAction.triggered.connect(self.open)
 
         self.newStitchAction = QAction("Juntar imagenes", self)
         self.newStitchAction.triggered.connect(self.juntarImagenes)
 
         self.enableSetZeroAction = QAction("Elegir origen", self)
+        self.enableSetZeroAction .setToolTip(
+            "Click derecho para definir el origen.")
         self.enableSetZeroAction.setCheckable(True)
         self.enableSetZeroAction.toggled.connect(self.enableSetZero)
+
+        self.enableMarcarLineaAction = QAction("Marcar linea", self)
+        self.enableMarcarLineaAction.setToolTip(
+            "Click derecho para marcar linea en el grafico.")
+        self.enableMarcarLineaAction.setCheckable(True)
+        self.enableMarcarLineaAction.toggled.connect(self.enableMarcarLinea)
 
         self.viewer.mousePositionOnImageChanged.connect(self.printPos)
         self.viewer.setTitleAction.connect(self.setTitle)
@@ -116,10 +102,22 @@ class MainWindow(QMainWindow):
     def enableSetZero(self, enable):
         if enable:
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
-            self.viewer.middleMouseButtonReleased.connect(self.setZero)
+            self.viewer.leftMouseButtonReleased.connect(self.setZero)
         else:
             self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
-            self.viewer.middleMouseButtonReleased.disconnect()
+            self.viewer.leftMouseButtonReleased.disconnect(self.setZero)
+
+    def enableMarcarLinea(self, enable):
+        if enable:
+            self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
+            self.viewer.mousePositionOnImageChanged.connect(
+                self.plot.mostrarLinea)
+            self.viewer.leftMouseButtonReleased.connect(self.marcarLinea)
+        else:
+            self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+            self.viewer.leftMouseButtonReleased.disconnect(self.marcarLinea)
+            self.viewer.mousePositionOnImageChanged.disconnect(
+                self.plot.mostrarLinea)
 
     def setZero(self, x, y):
         if self.zeroEllipse:
@@ -136,12 +134,30 @@ class MainWindow(QMainWindow):
             errorDialog(self, e, traceback.format_exc())
             print(e)
 
+    def marcarLinea(self, x, y):
+        try:
+            if not self.x:
+                QErrorMessage(self, "Primero hay que definir el origen")
+                return
+            self.plot.lineasMarcadas.append((self.plot.x, self.plot.fIn))
+            self.plot.lineasMarcadasX.append(self.plot.x)
+            self.plot.lineasMarcadasXnp = np.array(self.plot.lineasMarcadasX)
+            self.plot.line.set(ls=":", color="gray", alpha=0.5)
+            self.plot.lines.append(self.plot.line)
+            self.plot.line = None
+            # self.enableMarcarLineaAction.toggle()
+        except Exception as e:
+            errorDialog(self, e, traceback.format_exc())
+            print(e)
+
     def printPos(self, point):
         if self.zeroEllipse:
             try:
-                x, y = self._mapToum(QPointF(point) - self.zeroEllipsePos)
-                fIn = self.plot.getfIn(x)
-                self.status.showMessage(f"x={x}, y={y}   F={fIn:.2f}N")
+                self.plot.x, y = self._mapToum(
+                    QPointF(point) - self.zeroEllipsePos)
+                self.plot.fIn = self.plot.getfIn(self.plot.x)
+                self.status.showMessage(
+                    f"x={self.plot.x}, y={y}   F={self.plot.fIn:.2f}N")
             except Exception as e:
                 errorDialog(self, e, traceback.format_exc())
                 print(e)
@@ -201,8 +217,6 @@ class MainWindow(QMainWindow):
                 self.p = QProcess()
                 self.p.finished.connect(self.p_finished)
 
-                print('hola')
-
                 self.p.start(fiji, ["--headless", "--run", "stitch-macro.py",
                              f'{x=},{y=},{overlap=},directory="{str(directory)}",outpath="{self.outpath}"'])
             except Exception as e:
@@ -214,6 +228,19 @@ class MainWindow(QMainWindow):
         if self.csv_juntadas:
             self.plot.open(self.csv_juntadas[0])
         self.p = None
+
+    def open(self):
+        filepaths, _ = QFileDialog.getOpenFileNames(
+            self, "Abrir imagen y csv", "", "(*.jpg *.bmp *.png *.csv *.tsv *.xlx)")
+        filepaths = [Path(filepath).resolve() for filepath in filepaths]
+        try:
+            for filepath in filepaths:
+                if filepath.suffix in ['.jpg', '.bmp', '.png']:
+                    self.viewer.open(filepath=filepath)
+                elif filepath.suffix in ['.csv', '.tsv', '.xlx']:
+                    self.plot.open(filepath=filepath)
+        except Exception as e:
+            print(e)
 
 
 class Plot(QWidget):
@@ -235,6 +262,31 @@ class Plot(QWidget):
         self.ax = self.figure.add_subplot(111)
 
         self.figureCanvas.show()
+
+        self.x = 0
+        self.fIn = 0
+        self.line = None
+
+        # TODO leerlas de los metadatos
+        self.lineasMarcadas = []
+        self.lineasMarcadasX = []
+        self.lineasMarcadasXnp = np.array([])
+        self.lines = []
+
+        self.cursorOnLine = False
+        self.closestLineIdx = 0
+
+        self.moved = None
+        self.point = None
+        self.pressed = False
+        self.start = False
+
+        self.figureCanvas.mpl_connect(
+            'button_press_event', self.mousePressEvent)
+        self.figureCanvas.mpl_connect(
+            'button_release_event', self.mouseReleaseEvent)
+        self.figureCanvas.mpl_connect(
+            'motion_notify_event', self.mouseMoveEvent)
 
     def open(self, filepath):
         """Open file picker to open csv """
@@ -267,6 +319,8 @@ class Plot(QWidget):
         self.ax.cla()
         self.ax.plot(self.df.um, self.df.fIn, "b")
         self.ax.plot(self.df.um, self.df.fSet, "--", color="gray")
+        self.ax.set_xlabel(r"Largo (\mu m)")
+        self.ax.set_ylabel("Fuerza (N)")
         self.ax.set_title(title)
         self.figureCanvas.draw_idle()
         self.figure.tight_layout()
@@ -275,8 +329,68 @@ class Plot(QWidget):
         try:
             idx = np.searchsorted(self.df['um'], x, side='left')
             return self.df.fIn[idx]
-        except ValueError:
+        except (ValueError, KeyError):
             return 0
+
+    def mostrarLinea(self, point):
+        if point.x() > -1:
+            if not self.line:
+                self.line = self.ax.axvline(self.x, ls='-.', color="gray")
+            else:
+                self.line.set(xdata=[self.x, self.x], visible=True)
+        else:
+            if self.line:
+                self.line.set(visible=False)
+        self.figureCanvas.draw()
+
+    def mousePressEvent(self, event):
+        if self.ax.get_navigate_mode() != None:
+            return
+        if not event.inaxes:
+            return
+        if event.inaxes != self.ax:
+            return
+        if self.start:
+            return
+        self.point = event.xdata
+        self.pressed = True
+
+    def mouseReleaseEvent(self, event):
+        if self.ax.get_navigate_mode() != None:
+            return
+        if not event.inaxes:
+            return
+        if event.inaxes != self.ax:
+            return
+        if self.cursorOnLine:
+            self.lines.pop(self.closestLineIdx).remove()
+            self.lineasMarcadasX.pop(self.closestLineIdx)
+            self.lineasMarcadasXnp = np.array(self.lineasMarcadasX)
+            print(self.lines)
+            self.figureCanvas.draw_idle()
+            return
+        # if self.pressed:
+        #     self.pressed = False
+        #     self.start = False
+        #     self.point = None
+        #     return
+
+    def mouseMoveEvent(self, event):
+        if self.ax.get_navigate_mode() != None:
+            return
+        if not event.inaxes:
+            return
+        # if not self.pressed:
+        #     return
+        print(self.closestLineIdx)
+        if self.lineasMarcadasX:
+            if np.min(m := np.abs(int(event.xdata) - self.lineasMarcadasXnp)) < 20:
+                self.closestLineIdx = np.argmin(m)
+                self.figureCanvas.set_cursor(Cursors.HAND)
+                self.cursorOnLine = True
+        elif self.cursorOnLine:
+            self.figureCanvas.set_cursor(Cursors.POINTER)
+            self.cursorOnLine = False
 
 
 class QtImageViewer(QGraphicsView):
@@ -320,6 +434,9 @@ class QtImageViewer(QGraphicsView):
 
     TODO: Add support for editing the displayed image contrast.
     TODO: Add support for drawing ROIs with the mouse.
+
+    author = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
+    version = '2.0.0'
     """
 
     # Mouse button signals emit image scene (x, y) coordinates.
@@ -726,6 +843,81 @@ class QtImageViewer(QGraphicsView):
 
         QGraphicsView.wheelEvent(self, event)
 
+        # try:
+        #     if self.wheelZoomFactor == 1:
+        #         return
+        #
+        #     # self.setTransformationAnchor(
+        #     #     QGraphicsView.ViewportAnchor.NoAnchor)
+        #     # self.setResizeAnchor(QGraphicsView.ViewportAnchor.NoAnchor)
+        #
+        #     # # Save the scene pos
+        #     # oldPos = self.mapToScene(
+        #     #     int(event.position().x()), int(event.position().y()))
+        #     # # oldPos = event.globalPosition()
+        #     #
+        #     # # Zoom
+        #     # if event.angleDelta().y() > 0:
+        #     #     zoomFactor = self.wheelZoomFactor
+        #     # else:
+        #     #     zoomFactor = 1 / self.wheelZoomFactor
+        #     # self.scale(zoomFactor, zoomFactor)
+        #     #
+        #     # # Get the new position
+        #     # newPos = self.mapToScene(
+        #     #     int(event.position().x()), int(event.position().y()))
+        #     #
+        #     # # Move scene to old position
+        #     # delta = newPos - oldPos
+        #     # self.translate(delta.x(), delta.y())
+        #
+        #     if event.angleDelta().y() > 0:
+        #         # zoom in
+        #         if len(self.zoomStack) == 0:
+        #             self.zoomStack.append(self.sceneRect())
+        #         elif len(self.zoomStack) > 1:
+        #             del self.zoomStack[:-1]
+        #         zoomRect = self.zoomStack[-1]
+        #         # center = zoomRect.center()
+        #         # center = event.position()
+        #         center = self.mapToScene(
+        #             int(event.position().x()), int(event.position().y()))
+        #         zoomRect.setWidth(zoomRect.width() / self.wheelZoomFactor)
+        #         zoomRect.setHeight(zoomRect.height() /
+        #                            self.wheelZoomFactor)
+        #         zoomRect.moveCenter(center)
+        #         self.zoomStack[-1] = zoomRect.intersected(self.sceneRect())
+        #         self.updateViewer()
+        #         self.viewChanged.emit()
+        #     else:
+        #         # zoom out
+        #         if len(self.zoomStack) == 0:
+        #             # Already fully zoomed out.
+        #             return
+        #         if len(self.zoomStack) > 1:
+        #             del self.zoomStack[:-1]
+        #         zoomRect = self.zoomStack[-1]
+        #         # center = zoomRect.center()
+        #         # center = event.position()
+        #         center = self.mapToScene(
+        #             int(event.position().x()), int(event.position().y()))
+        #         zoomRect.setWidth(zoomRect.width() * self.wheelZoomFactor)
+        #         zoomRect.setHeight(zoomRect.height() *
+        #                            self.wheelZoomFactor)
+        #         zoomRect.moveCenter(center)
+        #         self.zoomStack[-1] = zoomRect.intersected(self.sceneRect())
+        #         if self.zoomStack[-1] == self.sceneRect():
+        #             self.zoomStack = []
+        #         self.updateViewer()
+        #
+        #     print(center)
+        #
+        #     self.viewChanged.emit()
+        #     event.accept()
+        # except Exception as e:
+        #     print(e)
+        # return
+
     def mouseMoveEvent(self, event):
         # Emit updated view during panning.
         if self._isPanning:
@@ -751,7 +943,6 @@ class QtImageViewer(QGraphicsView):
             # Invalid pixel position.
             self.imagePos = QPoint(-1, -1)
         self.mousePositionOnImageChanged.emit(self.imagePos)
-
         QGraphicsView.mouseMoveEvent(self, event)
 
     def enterEvent(self, event):
