@@ -95,6 +95,7 @@ class MainWindow(QMainWindow):
             "Click derecho para marcar linea en el grafico.")
         self.enableMarcarLineaAction.setCheckable(True)
         self.enableMarcarLineaAction.toggled.connect(self.enableMarcarLinea)
+        self.enableMarcarLineaAction.setDisabled(True)
 
         self.viewer.mousePositionOnImageChanged.connect(self.printPos)
         self.viewer.setTitleAction.connect(self.setTitle)
@@ -102,22 +103,25 @@ class MainWindow(QMainWindow):
     def enableSetZero(self, enable):
         if enable:
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
-            self.viewer.middleMouseButtonReleased.connect(self.setZero)
+            self.viewer.rightMouseButtonReleased.connect(self.setZero)
         else:
             self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
-            self.viewer.middleMouseButtonReleased.disconnect(self.setZero)
+            self.viewer.rightMouseButtonReleased.disconnect(self.setZero)
 
     def enableMarcarLinea(self, enable):
         if enable:
+            if not self.zeroEllipse:
+                errorDialog(self, "Error", "Primero hay que definir el origen")
+                return
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
-            self.viewer.settingZero = True
             self.viewer.mousePositionOnImageChanged.connect(
                 self.plot.mostrarLinea)
             self.viewer.drawROI = 'Line'
-            self.viewer.leftMouseButtonReleased.connect(self.marcarLinea)
+            self.viewer.rightMouseButtonReleased.connect(self.plot.marcarLinea)
         else:
             self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
-            self.viewer.leftMouseButtonReleased.disconnect(self.marcarLinea)
+            self.viewer.rightMouseButtonReleased.disconnect(
+                self.plot.marcarLinea)
             self.viewer.mousePositionOnImageChanged.disconnect(
                 self.plot.mostrarLinea)
             self.viewer.drawROI = None
@@ -132,24 +136,9 @@ class MainWindow(QMainWindow):
             self.zeroEllipsePos = QPointF(round(x-r), round(y-r))
 
             self.enableSetZeroAction.toggle()
+            self.enableMarcarLineaAction.setDisabled(False)
         except Exception as e:
             # pass
-            errorDialog(self, e, traceback.format_exc())
-            print(e)
-
-    def marcarLinea(self, x, y):
-        try:
-            if not self.x:
-                QErrorMessage(self, "Primero hay que definir el origen")
-                return
-            self.plot.lineasMarcadas.append((self.plot.x, self.plot.fIn))
-            self.plot.lineasMarcadasX.append(self.plot.x)
-            self.plot.lineasMarcadasXnp = np.array(self.plot.lineasMarcadasX)
-            self.plot.line.set(ls=":", color="gray", alpha=0.5)
-            self.plot.lines.append(self.plot.line)
-            self.plot.line = None
-            # self.enableMarcarLineaAction.toggle()
-        except Exception as e:
             errorDialog(self, e, traceback.format_exc())
             print(e)
 
@@ -346,6 +335,15 @@ class Plot(QWidget):
                 self.line.set(visible=False)
         self.figureCanvas.draw()
 
+    def marcarLinea(self, x, y):
+        if self.line is not None:
+            self.lineasMarcadas.append((self.x, self.fIn))
+            self.lineasMarcadasX.append(self.x)
+            self.lineasMarcadasXnp = np.array(self.lineasMarcadasX)
+            self.line.set(ls=":", color="gray", alpha=0.5)
+            self.lines.append(self.line)
+            self.line = None
+
     def mousePressEvent(self, event):
         if self.ax.get_navigate_mode() != None:
             return
@@ -527,7 +525,6 @@ class QtImageViewer(QGraphicsView):
 
         # # For drawing ROIs.
         self.drawROI = None
-        self.settingZero = False
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
@@ -726,7 +723,7 @@ class QtImageViewer(QGraphicsView):
         scenePos = self.mapToScene(event.pos())
 
         # Draw ROI
-        if (self.drawROI is not None) and (event.button() == self.addROIsButton):
+        if (self.drawROI is not None) and (event.button() == self.addROIsButton) and (self.imagePos.y() >= 0):
             if self.drawROI == "Ellipse":
                 # Click and drag to draw ellipse. +Shift for circle.
                 pass
@@ -739,7 +736,6 @@ class QtImageViewer(QGraphicsView):
             elif self.drawROI == "Polygon":
                 # Click to add points to polygon. Double-click to close polygon.
                 pass
-            return
 
         # Finish dragging a region zoom box?
         if (self.regionZoomButton is not None) and (event.button() == self.regionZoomButton):
