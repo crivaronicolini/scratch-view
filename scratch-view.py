@@ -104,6 +104,7 @@ class MainWindow(QMainWindow):
         if enable:
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
             self.viewer.rightMouseButtonReleased.connect(self.setZero)
+            self.enableMarcarLineaAction.setChecked(False)
         else:
             self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
             self.viewer.rightMouseButtonReleased.disconnect(self.setZero)
@@ -113,6 +114,7 @@ class MainWindow(QMainWindow):
             if not self.zeroEllipse:
                 errorDialog(self, "Error", "Primero hay que definir el origen")
                 return
+            self.enableSetZeroAction.setChecked(False)
             self.viewer.viewport().setCursor(Qt.CursorShape.CrossCursor)
             self.viewer.mousePositionOnImageChanged.connect(
                 self.plot.mostrarLinea)
@@ -1143,8 +1145,6 @@ if __name__ == '__main__':
     viewer.open(Path(img))
     mainwindow.plot.open(Path(csv))
 
-    viewer.addSpots([(100, 100)], 100)
-    viewer.addLine(1000)
     # Handle left mouse clicks with your own custom slot
     # handleLeftClick(x, y). (x, y) are image coordinates.
     # For (row, col) matrix indexing, row=y and col=x.
