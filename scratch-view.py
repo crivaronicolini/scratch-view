@@ -14,9 +14,9 @@ import pandas as pd
 import numpy as np
 
 from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, QProcess
-from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor
+from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor, QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-    QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel, QMessageBox
+    QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel, QMessageBox, QGraphicsProxyWidget, QPushButton
 
 
 def errorDialog(parent, title, message):
@@ -55,7 +55,22 @@ class MainWindow(QMainWindow):
         self.status = self.statusBar()
         self.status.showMessage("Data loaded and plotted")
 
+        self.setAcceptDrops(True)
+        self.viewer.setAcceptDrops(True)
+
+        self.viewer.dropEvent = self.dropEvent
+        self.plot.dropEvent = self.dropEvent
+
+        self.viewer.dragEnterEvent = self.dragEnterEvent
+        self.viewer.dragMoveEvent = self.dragMoveEvent
+        self.plot.dragEnterEvent = self.dragEnterEvent
+
         self.p = None
+
+        self.imgFiletypes = ['.jpg', '.bmp', '.png']
+        self.dataFiletypes = ['.csv', '.tsv']
+
+        self.filetypes = self.imgFiletypes + self.dataFiletypes
 
         # TODO hacer configurable
         self.scale = 0.44  # px/um
@@ -131,31 +146,21 @@ class MainWindow(QMainWindow):
     def setZero(self, x, y):
         if self.zeroEllipse:
             self.viewer.scene.removeItem(self.zeroEllipse)
-        try:
-            r = 25
-            self.zeroEllipse = self.viewer.scene.addEllipse(
-                x-r, y-r, 2*r, 2*r, pen=0, brush=QColor("#FFD141"))
-            self.zeroEllipsePos = QPointF(round(x-r), round(y-r))
+        r = 25
+        self.zeroEllipse = self.viewer.scene.addEllipse(
+            x-r, y-r, 2*r, 2*r, pen=0, brush=QColor("#FFD141"))
+        self.zeroEllipsePos = QPointF(round(x-r), round(y-r))
 
-            self.enableSetZeroAction.toggle()
-            self.enableMarcarLineaAction.setDisabled(False)
-        except Exception as e:
-            # pass
-            errorDialog(self, e, traceback.format_exc())
-            print(e)
+        self.enableSetZeroAction.toggle()
+        self.enableMarcarLineaAction.setDisabled(False)
 
     def printPos(self, point):
         if self.zeroEllipse:
-            try:
-                self.plot.x, y = self._mapToum(
-                    QPointF(point) - self.zeroEllipsePos)
-                self.plot.fIn = self.plot.getfIn(self.plot.x)
-                self.status.showMessage(
-                    f"x={self.plot.x}, y={y}   F={self.plot.fIn:.2f}N")
-            except Exception as e:
-                errorDialog(self, e, traceback.format_exc())
-                print(e)
-                # pass
+            self.plot.x, y = self._mapToum(
+                QPointF(point) - self.zeroEllipsePos)
+            self.plot.fIn = self.plot.getfIn(self.plot.x)
+            self.status.showMessage(
+                f"x={self.plot.x}, y={y}   F={self.plot.fIn:.2f}N")
 
     def _mapToum(self, point):
         x, y = point.x(), point.y()
@@ -178,43 +183,40 @@ class MainWindow(QMainWindow):
         """Da para elegir una carpeta y corre una macro de Fiji sobre las imagenes de esa carpeta.
         Guarda el resultado con el nombre de la carpeta"""
         if not self.p:
-            try:
-                fiji = self._whichFiji()
-                directory = QFileDialog.getExistingDirectory(
-                    self, "Abrir carpeta de imagenes")
-                directory = Path(directory).resolve()
+            fiji = self._whichFiji()
+            directory = QFileDialog.getExistingDirectory(
+                self, "Abrir carpeta de imagenes")
+            directory = Path(directory).resolve()
 
-                self.directory_juntadas = directory
-                self.files_juntadas = sorted(Path.iterdir(directory))
-                self.csv_juntadas = [
-                    f for f in self.files_juntadas if f.name.endswith('csv')]
-                imgs = [
-                    f for f in self.files_juntadas if f.name.endswith('jpg')]
+            self.directory_juntadas = directory
+            self.files_juntadas = sorted(Path.iterdir(directory))
+            self.csv_juntadas = [
+                f for f in self.files_juntadas if f.name.endswith('csv')]
+            imgs = [
+                f for f in self.files_juntadas if f.name.endswith('jpg')]
 
-                if imgs[0].stem != '1':
-                    # TODO convertir los archivos a 1 2 3...
-                    pass
+            if imgs[0].stem != '1':
+                # TODO convertir los archivos a 1 2 3...
+                pass
 
-                x = len(imgs)
-                y = 1
-                overlap = 20
+            x = len(imgs)
+            y = 1
+            overlap = 20
 
-                # si está el csv de la medición uso eso como nombre de archivo
-                if self.csv_juntadas:
-                    self.outpath = ''.join(
-                        [str(directory.parent / self.csv_juntadas[0].stem), '.jpg'])
-                else:
-                    self.outpath = ''.join(
-                        [str(directory.parent / directory.name), '.jpg'])
+            # si está el csv de la medición uso eso como nombre de archivo
+            if self.csv_juntadas:
+                self.outpath = ''.join(
+                    [str(directory.parent / self.csv_juntadas[0].stem), '.jpg'])
+            else:
+                self.outpath = ''.join(
+                    [str(directory.parent / directory.name), '.jpg'])
 
-                self.status.showMessage('Uniendo imagenes')
-                self.p = QProcess()
-                self.p.finished.connect(self.p_finished)
+            self.status.showMessage('Uniendo imagenes')
+            self.p = QProcess()
+            self.p.finished.connect(self.p_finished)
 
-                self.p.start(fiji, ["--headless", "--run", "stitch-macro.py",
-                             f'{x=},{y=},{overlap=},directory="{str(directory)}",outpath="{self.outpath}"'])
-            except Exception as e:
-                errorDialog(self, e, traceback.format_exc())
+            self.p.start(fiji, ["--headless", "--run", "stitch-macro.py",
+                         f'{x=},{y=},{overlap=},directory="{str(directory)}",outpath="{self.outpath}"'])
 
     def p_finished(self):
         self.status.showMessage(f'Imagen guardada en {self.outpath}')
@@ -223,18 +225,34 @@ class MainWindow(QMainWindow):
             self.plot.open(self.csv_juntadas[0])
         self.p = None
 
-    def open(self):
-        filepaths, _ = QFileDialog.getOpenFileNames(
-            self, "Abrir imagen y csv", "", "(*.jpg *.bmp *.png *.csv *.tsv *.xlx)")
-        filepaths = [Path(filepath).resolve() for filepath in filepaths]
-        try:
-            for filepath in filepaths:
-                if filepath.suffix in ['.jpg', '.bmp', '.png']:
-                    self.viewer.open(filepath=filepath)
-                elif filepath.suffix in ['.csv', '.tsv', '.xlx']:
-                    self.plot.open(filepath=filepath)
-        except Exception as e:
-            print(e)
+    def open(self, filepaths=None):
+        """Abre lista de archivos, o abre un seleccionador de archivos"""
+        if not filepaths:
+            filepaths, _ = QFileDialog.getOpenFileNames(
+                self, "Abrir imagen y csv", "", "(*.jpg *.bmp *.png *.csv *.tsv)")
+            filepaths = [Path(filepath).resolve() for filepath in filepaths]
+        elif not isinstance(filepaths, list):
+            filepaths = [filepaths]
+        for filepath in filepaths:
+            if filepath.suffix in self.imgFiletypes:
+                self.viewer.open(filepath=filepath)
+            elif filepath.suffix in self.dataFiletypes:
+                self.plot.open(filepath=filepath)
+
+    def dragEnterEvent(self, event):
+        """Acepta archivos si alguno tiene formato valido"""
+        if (event.mimeData().hasFormat("text/uri-list")):
+            urls = event.mimeData().urls()
+            self.paths = [path for path in (
+                Path(url.path()) for url in urls) if path.suffix in self.filetypes]
+            if self.paths:
+                event.accept()
+
+    def dropEvent(self, _):
+        self.open(self.paths)
+
+    def dragMoveEvent(self, event):
+        pass
 
 
 class Plot(QWidget):
@@ -313,7 +331,7 @@ class Plot(QWidget):
         self.ax.cla()
         self.ax.plot(self.df.um, self.df.fIn, "b")
         self.ax.plot(self.df.um, self.df.fSet, "--", color="gray")
-        self.ax.set_xlabel(r"Largo (\mu m)")
+        self.ax.set_xlabel(r"$\mathrm{Largo\ (\mu m)}$")
         self.ax.set_ylabel("Fuerza (N)")
         self.ax.set_title(title)
         self.figureCanvas.draw_idle()
@@ -369,7 +387,6 @@ class Plot(QWidget):
             self.lines.pop(self.closestLineIdx).remove()
             self.lineasMarcadasX.pop(self.closestLineIdx)
             self.lineasMarcadasXnp = np.array(self.lineasMarcadasX)
-            print(self.lines)
             self.figureCanvas.draw_idle()
             return
         # if self.pressed:
@@ -385,7 +402,6 @@ class Plot(QWidget):
             return
         # if not self.pressed:
         #     return
-        print(self.closestLineIdx)
         if self.lineasMarcadasX:
             if np.min(m := np.abs(int(event.xdata) - self.lineasMarcadasXnp)) < 20:
                 self.closestLineIdx = np.argmin(m)
@@ -394,6 +410,29 @@ class Plot(QWidget):
         elif self.cursorOnLine:
             self.figureCanvas.set_cursor(Cursors.POINTER)
             self.cursorOnLine = False
+
+
+# Hay que hacer estas clases para poder tener drag & drop
+class MyScene(QGraphicsScene):
+    def dragEnterEvent(self, _):
+        pass
+
+    def dropEvent(self, _):
+        pass
+
+    def dragMoveEvent(self, _):
+        pass
+
+
+class MyProxy(QGraphicsProxyWidget):
+    def dragEnterEvent(self, _):
+        pass
+
+    def dropEvent(self, _):
+        pass
+
+    def dragMoveEvent(self, _):
+        pass
 
 
 class QtImageViewer(QGraphicsView):
@@ -472,7 +511,12 @@ class QtImageViewer(QGraphicsView):
         QGraphicsView.__init__(self)
 
         # Image is displayed as a QPixmap in a QGraphicsScene attached to this QGraphicsView.
-        self.scene = QGraphicsScene()
+        self.scene = MyScene()
+        my_proxy = MyProxy()
+        button = QPushButton()
+        my_proxy.setWidget(button)
+        my_proxy.setAcceptDrops(True)
+        self.scene.addItem(my_proxy)
         self.setScene(self.scene)
 
         # Better quality pixmap scaling?
@@ -1074,22 +1118,12 @@ class PolygonROI(QGraphicsPolygonItem):
 
 if __name__ == '__main__':
     import sys
-    try:
-        from PyQt6.QtWidgets import QApplication
-    except ImportError:
-        from PyQt5.QtWidgets import QApplication
-
-    def handleLeftClick(x, y):
-        row = int(y)
-        column = int(x)
-        print("Clicked on image pixel (row="+str(row)+", column="+str(column)+")")
-
-    def handleViewChange():
-        print("viewChanged")
+    from PyQt6.QtWidgets import QApplication
 
     def my_exception_hook(exctype, value, traceback):
         # Print the error and traceback
         print(exctype, value, traceback)
+        errorDialog(mainwindow, exctype, traceback)
         # Call the normal Exception hook after
         sys._excepthook(exctype, value, traceback)
         sys.exit(1)
@@ -1142,8 +1176,7 @@ if __name__ == '__main__':
     # Load an image file to be displayed (will popup a file dialog).
     img = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/5-60.jpg"
     csv = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/M1402_5-60_1.csv"
-    viewer.open(Path(img))
-    mainwindow.plot.open(Path(csv))
+    mainwindow.open([Path(img), Path(csv)])
 
     # Handle left mouse clicks with your own custom slot
     # handleLeftClick(x, y). (x, y) are image coordinates.
