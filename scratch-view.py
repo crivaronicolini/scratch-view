@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, QProcess
+from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, QProcess, QSettings
 from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor, QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
     QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel, QMessageBox, QGraphicsProxyWidget, QPushButton
@@ -28,10 +28,10 @@ def errorDialog(parent, title, message):
 class MainWindow(QMainWindow):
     def __init__(self, ):
         QMainWindow.__init__(self)
-        self.setWindowTitle("aber")
+        self.setWindowTitle("Scratch View")
         self.viewer = QtImageViewer()
         self.plot = Plot()
-        self.label = QLabel('hola')
+        self.label = QLabel('')
         f = self.label.font()
         f.setPointSize(15)
         self.label.setFont(f)
@@ -76,6 +76,9 @@ class MainWindow(QMainWindow):
         self.scale = 0.44  # px/um
 
         self.zeroEllipse = None
+
+        self.lastDir = ""
+        self.readSettings()
 
         self.show()
 
@@ -229,10 +232,11 @@ class MainWindow(QMainWindow):
         """Abre lista de archivos, o abre un seleccionador de archivos"""
         if not filepaths:
             filepaths, _ = QFileDialog.getOpenFileNames(
-                self, "Abrir imagen y csv", "", "(*.jpg *.bmp *.png *.csv *.tsv)")
+                self, caption="Abrir imagen y csv", directory=self.lastDir, filter="(*.jpg *.bmp *.png *.csv *.tsv)")
             filepaths = [Path(filepath).resolve() for filepath in filepaths]
         elif not isinstance(filepaths, list):
             filepaths = [filepaths]
+        self.lastDir = str(filepaths[0].resolve())
         for filepath in filepaths:
             if filepath.suffix in self.imgFiletypes:
                 self.viewer.open(filepath=filepath)
@@ -253,6 +257,24 @@ class MainWindow(QMainWindow):
 
     def dragMoveEvent(self, event):
         pass
+
+    def closeEvent(self, event):
+        self.saveSettings()
+        event.accept()
+
+    def readSettings(self):
+        self.settings = QSettings("INFINA", "Scratch View")
+        self.resize(self.settings.value("size", QSize(1000, 500)))
+        self.move(self.settings.value("pos", QPoint(100, 100)))
+        if not self.settings.value("isMaximized", False):
+            self.showMaximized()
+        self.lastDir = self.settings.value("lastDir", self.lastDir)
+
+    def saveSettings(self):
+        self.settings.setValue("size", self.size())
+        self.settings.setValue("pos", self.pos())
+        self.settings.setValue("isMaximized", self.isMaximized())
+        self.settings.setValue("lastDir", self.lastDir)
 
 
 class Plot(QWidget):
