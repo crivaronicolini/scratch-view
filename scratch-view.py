@@ -80,7 +80,6 @@ class MainWindow(QMainWindow):
         self.lastDir = ""
         self.readSettings()
 
-        ScaleDialog(self)
         self.show()
 
     def setScaleFromBtn(self, button):
@@ -289,7 +288,8 @@ class MainWindow(QMainWindow):
         self.lastDir = self.settings.value("lastDir", self.lastDir)
         self.scaleCurrentName = self.settings.value(
             "scaleCurrentName", 'olympus')
-        self.scaleCurrentValue = self.settings.value("scaleCurrentValue", 0.44)
+        self.scaleCurrentValue = float(
+            self.settings.value("scaleCurrentValue", 0.44))
         self.scales = self.settings.value("scales", self.scales)
 
     def saveSettings(self):
