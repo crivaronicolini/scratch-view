@@ -1,22 +1,22 @@
 """ Scratch View: Analizador de ensayos de rayado.
 """
 
-__author__ = "Marco Crivaro Nicolini"
+__author__ = "Marco Crivaro Nicolini <mcn.hola@gmail.com>"
 __version__ = 0.1
 __year__ = 2023
 __org__ = "INFINA, FCEN UBA"
 __website__ = 'https://github.com/crivaronicolini/scratch-view/'
 
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
-from matplotlib.backend_tools import Cursors
 from pathlib import Path
 import platform
 import traceback
 
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backend_tools import Cursors
 
 from PyQt6.QtCore import Qt, QPoint, QPointF, pyqtSignal, QSize, QProcess, QSettings
 from PyQt6.QtGui import QAction, QColor, QIcon
