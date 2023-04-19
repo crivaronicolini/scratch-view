@@ -1,6 +1,11 @@
-""" QtImageViewer.py: PyQt image viewer widget based on QGraphicsView with mouse zooming/panning and ROIs.
-
+""" Scratch View: Analizador de ensayos de rayado.
 """
+
+__author__ = "Marco Crivaro Nicolini"
+__version__ = 0.1
+__year__ = 2023
+__org__ = "INFINA, FCEN UBA"
+__website__ = 'https://github.com/crivaronicolini/scratch-view/'
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backend_tools import Cursors
@@ -103,6 +108,10 @@ class MainWindow(QMainWindow):
         imgMenu.addAction(self.newStitchAction)
         imgMenu.addAction(self.setScaleAction)
 
+        helpMenu = menuBar.addMenu("Ayuda")
+        helpMenu.addAction(self.showTutorialAction)
+        helpMenu.addAction(self.showAboutAction)
+
     def _createToolBars(self):
         mainToolBar = QToolBar("Main", self)
         self.addToolBar(mainToolBar)
@@ -134,6 +143,12 @@ class MainWindow(QMainWindow):
 
         self.setScaleAction = QAction("Cambiar escala", self)
         self.setScaleAction.triggered.connect(lambda: ScaleDialog(self))
+
+        self.showTutorialAction = QAction("Tutorial", self)
+        self.showTutorialAction.triggered.connect(self.showTutorial)
+
+        self.showAboutAction = QAction("Sobre Scratch View", self)
+        self.showAboutAction .triggered.connect(self.showAbout)
 
     def enableSetZero(self, enable):
         if enable:
@@ -301,9 +316,23 @@ class MainWindow(QMainWindow):
         self.settings.setValue("scaleCurrentValue", self.scaleCurrentValue)
         self.settings.setValue("scales", self.scales)
 
+    def showAbout(self):
+        msgBox = QMessageBox(self)
+        msgBox.setWindowTitle("Sobre Scratch View")
+        msgBox.setStyleSheet(
+            f"qproperty-alignment: {int(Qt.AlignmentFlag.AlignCenter)};line-height: 220%;")
+        msgBox.setTextFormat(Qt.TextFormat(Qt.TextFormat.RichText))
+        msgBox.setText("<h4>Scratch View    </h4>")
+        msgBox.setInformativeText(
+            f"<p>{__version__}</p><p>Analiza ensayos de rayado</p><p><a href='{__website__}'>Web</a></p><p>{__author__}, {__year__}</p><p><small>{__org__}</small></p><p><small>Este programa no brinda absolutamente ninguna garantia.<br>Ver la <a href='https://www.gnu.org/licenses/gpl-3.0.html'>licencia GPL version 2 o superior</a> para mas informacion</small></p>")
+        msgBox.open()
+
+    def showTutorial(self):
+        pass
+
 
 class ScaleDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent):
         super(QDialog, self).__init__(parent)
         self.parent = parent
         self.pushButtons = []
