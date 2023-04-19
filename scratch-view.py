@@ -14,9 +14,8 @@ import pandas as pd
 import numpy as np
 
 from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, QProcess, QSettings
-from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor, QDragEnterEvent, QDropEvent
-from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-    QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel, QMessageBox, QGraphicsProxyWidget, QPushButton
+from PyQt6.QtGui import QAction, QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QBrush, QColor, QDragEnterEvent, QDropEvent, QIcon
+from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QLabel, QMessageBox, QGraphicsProxyWidget, QPushButton, QInputDialog, QDialog, QRadioButton, QButtonGroup, QDialogButtonBox, QFormLayout, QLineEdit
 
 
 def errorDialog(parent, title, message):
@@ -72,22 +71,38 @@ class MainWindow(QMainWindow):
 
         self.filetypes = self.imgFiletypes + self.dataFiletypes
 
-        # TODO hacer configurable
-        self.scale = 0.44  # px/um
+        self.scales = {'olympus': 0.44}
+        self.scaleCurrentName = 'olympus'
+        self.scaleCurrentValue = 0.44
 
         self.zeroEllipse = None
 
         self.lastDir = ""
         self.readSettings()
 
+        ScaleDialog(self)
         self.show()
+
+    def setScaleFromBtn(self, button):
+        self.scaleCurrentName = button.text()
+        self.scaleCurrentValue = self.scales[self.scaleCurrentName]
+
+    def setScaleFromText(self, nombre, valor):
+        self.scaleCurrentValue = self.scales[nombre] = float(valor)
+        self.scaleCurrentName = nombre
+
+    def eraseScale(self, nombre):
+        self.scales.pop(nombre)
 
     def _createMenuBar(self):
         menuBar = self.menuBar()
         # File menu
         fileMenu = menuBar.addMenu("Archivo")
         fileMenu.addAction(self.newFileAction)
-        fileMenu.addAction(self.newStitchAction)
+        # Img menu
+        imgMenu = menuBar.addMenu("Imagen")
+        imgMenu.addAction(self.newStitchAction)
+        imgMenu.addAction(self.setScaleAction)
 
     def _createToolBars(self):
         mainToolBar = QToolBar("Main", self)
@@ -103,7 +118,7 @@ class MainWindow(QMainWindow):
         self.newStitchAction.triggered.connect(self.juntarImagenes)
 
         self.enableSetZeroAction = QAction("Elegir origen", self)
-        self.enableSetZeroAction .setToolTip(
+        self.enableSetZeroAction.setToolTip(
             "Click derecho para definir el origen.")
         self.enableSetZeroAction.setCheckable(True)
         self.enableSetZeroAction.toggled.connect(self.enableSetZero)
@@ -117,6 +132,9 @@ class MainWindow(QMainWindow):
 
         self.viewer.mousePositionOnImageChanged.connect(self.printPos)
         self.viewer.setTitleAction.connect(self.setTitle)
+
+        self.setScaleAction = QAction("Cambiar escala", self)
+        self.setScaleAction.triggered.connect(lambda: ScaleDialog(self))
 
     def enableSetZero(self, enable):
         if enable:
@@ -167,7 +185,7 @@ class MainWindow(QMainWindow):
 
     def _mapToum(self, point):
         x, y = point.x(), point.y()
-        return round(self.scale * x), round(self.scale * y)
+        return round(self.scaleCurrentValue * x), round(self.scaleCurrentValue * y)
 
     def setTitle(self, title):
         self.label.setText(title)
@@ -269,12 +287,131 @@ class MainWindow(QMainWindow):
         if not self.settings.value("isMaximized", False):
             self.showMaximized()
         self.lastDir = self.settings.value("lastDir", self.lastDir)
+        self.scaleCurrentName = self.settings.value(
+            "scaleCurrentName", 'olympus')
+        self.scaleCurrentValue = self.settings.value("scaleCurrentValue", 0.44)
+        self.scales = self.settings.value("scales", self.scales)
 
     def saveSettings(self):
         self.settings.setValue("size", self.size())
         self.settings.setValue("pos", self.pos())
         self.settings.setValue("isMaximized", self.isMaximized())
         self.settings.setValue("lastDir", self.lastDir)
+        self.settings.setValue("scaleCurrentName", self.scaleCurrentName)
+        self.settings.setValue("scaleCurrentValue", self.scaleCurrentValue)
+        self.settings.setValue("scales", self.scales)
+
+
+class ScaleDialog(QDialog):
+    def __init__(self, parent=None):
+        super(QDialog, self).__init__(parent)
+        self.parent = parent
+        self.pushButtons = []
+        self.trashIcon = QIcon.fromTheme('user-trash')
+        self.trashIconWidth = self.trashIcon.pixmap(100).width()
+        self.dialog = QDialog(parent)
+        self.dialog.setWindowTitle("Escala de microscopio")
+        self.buttonGroup = QButtonGroup(self)
+        self.vboxLayout = QVBoxLayout(self)
+
+        for i, (nombre, escala) in enumerate(parent.scales.items()):
+            self.addItem(i, nombre, escala)
+
+        btnBox = QDialogButtonBox(self)
+        btnBox.setStandardButtons(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        newScaleBtn = QPushButton("Nueva escala", btnBox)
+        newScaleBtn.clicked.connect(lambda: self.newScale(self.dialog))
+        btnBox.addButton(newScaleBtn, QDialogButtonBox.ButtonRole.ActionRole)
+        self.vboxLayout.addWidget(btnBox)
+        self.dialog.setLayout(self.vboxLayout)
+        self.buttonGroup.buttonReleased.connect(parent.setScaleFromBtn)
+
+        btnBox.accepted.connect(self.dialog.accept)
+        btnBox.rejected.connect(self.dialog.close)
+        self.btnBox = btnBox
+        if len(self.buttonGroup.buttons()) == 1:
+            self.disableTrashing()
+        self.dialog.open()
+
+    def removeItem(self, pushButton, radioButton, nombre, widget):
+        if len(self.buttonGroup.buttons()) > 1:
+            self.parent.eraseScale(nombre)
+            self.buttonGroup.removeButton(radioButton)
+            self.pushButtons.remove(pushButton)
+            widget.close()
+
+        if len(self.buttonGroup.buttons()) == 1:
+            self.disableTrashing()
+
+        self.checkItem(0)
+
+    def addItem(self, i, nombre, escala):
+        hbox = QWidget(self.dialog)
+        hboxLayout = QHBoxLayout(self.dialog)
+        button = QRadioButton(nombre, self.dialog)
+        button.setChecked(nombre == self.parent.scaleCurrentName)
+        self.buttonGroup.addButton(button)
+        hboxLayout.addWidget(button)
+        hboxLayout.addWidget(QLabel(str(escala)))
+        if not self.trashIcon.isNull():
+            hboxLayout.addWidget(borrar := QPushButton(self.trashIcon, ''))
+            borrar.setFixedWidth(self.trashIconWidth//2)
+        else:
+            hboxLayout.addWidget(borrar := QPushButton('Borrar'))
+        borrar.clicked.connect(lambda: self.removeItem(
+            borrar, button, nombre, hbox))
+        hbox.setLayout(hboxLayout)
+        self.vboxLayout.insertWidget(i, hbox)
+        self.pushButtons.append(borrar)
+        return button
+
+    def addItemAndCheck(self, i, nombre, escala):
+        button = self.addItem(i, nombre, escala)
+        button.setChecked(True)
+        self.parent.setScaleFromText(nombre, escala)
+
+    def checkItem(self, i):
+        button = self.buttonGroup.buttons()[i]
+        button.setChecked(True)
+        self.parent.setScaleFromBtn(button)
+
+    def enableTrashing(self):
+        self.pushButtons[0].setEnabled(True)
+
+    def disableTrashing(self):
+        self.pushButtons[0].setEnabled(False)
+
+    def newScale(self, parent):
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("Nueva escala")
+        layout = QFormLayout(dialog)
+        layout.addRow("Nombre", nombre := QLineEdit())
+        layout.addRow("Valor (um/pixel)", valor := QLineEdit())
+
+        btnBox = QDialogButtonBox(dialog)
+        btnBox.setStandardButtons(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        layout.addWidget(btnBox)
+        dialog.setLayout(layout)
+        # deshabilita el Ok si no estan los dos campos llenos
+        ok = btnBox.buttons()[0]
+        ok.setDisabled(True)
+        nombre.textChanged.connect(lambda: ok.setDisabled(
+            False) if valor.text() else None)
+        valor.textChanged.connect(lambda: ok.setDisabled(
+            False) if nombre.text() else None)
+
+        btnBox.accepted.connect(dialog.accept)
+        btnBox.accepted.connect(self.enableTrashing)
+        # selecciona ok en el dialogo anterior
+        btnBox.accepted.connect(
+            lambda: self.btnBox.buttons()[0].setFocus())
+        # agrega el nuevo item al menu y lo selecciona
+        btnBox.accepted.connect(
+            lambda: self.addItemAndCheck(len(self.parent.scales.keys()), nombre.text(), valor.text()))
+        btnBox.rejected.connect(dialog.close)
+        dialog.open()
 
 
 class Plot(QWidget):
@@ -1210,6 +1347,6 @@ if __name__ == '__main__':
     # left clicks being handled by the regionZoomButton.
     # viewer.middleMouseButtonReleased.connect(handleLeftClick)
 
-    # Show the viewer and run the application.
+    # Show the viewer and run the application.formlayout
     # mainwindow.show()
     sys.exit(app.exec())
