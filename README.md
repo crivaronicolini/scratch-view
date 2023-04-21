@@ -1,3 +1,7 @@
+<p align="center">
+  <img width="128" src="https://user-images.githubusercontent.com/33268188/233685530-d7a40af1-30d1-41fb-8b86-35475dbff597.svg">
+</p>
+
 # Scratch View
 Interfaz gráfica para analizar huellas de ensayo de rayado y los datos recopilados por Scratch Tester.
 
