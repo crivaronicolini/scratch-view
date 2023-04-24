@@ -34,6 +34,9 @@ def errorDialog(parent, title, message):
 class MainWindow(QMainWindow):
     def __init__(self, ):
         QMainWindow.__init__(self)
+        self.icon = QIcon()
+        self.icon.addFile('iconf512.svg', QSize(512, 512))
+        self.setWindowIcon(self.icon)
         self.setWindowTitle("Scratch View")
         self.viewer = QtImageViewer()
         self.plot = Plot()
@@ -321,12 +324,11 @@ class MainWindow(QMainWindow):
     def showAbout(self):
         msgBox = QMessageBox(self)
         msgBox.setWindowTitle("Sobre Scratch View")
-        msgBox.setStyleSheet(
-            f"qproperty-alignment: {int(Qt.AlignmentFlag.AlignCenter)};line-height: 220%;")
         msgBox.setTextFormat(Qt.TextFormat(Qt.TextFormat.RichText))
-        msgBox.setText("<h4>Scratch View    </h4>")
+        msgBox.setText(
+            f"<center><p><img src='icone128.png' width=128></img></p><h3>Scratch View    </h3></center>")
         msgBox.setInformativeText(
-            f"<p>{__version__}</p><p>Analiza ensayos de rayado</p><p><a href='{__website__}'>Web</a></p><p>{__author__}, {__year__}</p><p><small>{__org__}</small></p><p><small>Este programa no brinda absolutamente ninguna garantia.<br>Ver la <a href='https://www.gnu.org/licenses/gpl-3.0.html'>licencia GPL version 2 o superior</a> para mas informacion</small></p>")
+            f"<center><p>{__version__}</p><p>Analiza ensayos de rayado</p><p><a href='{__website__}'>Web</a></p><p>{__author__}, {__year__}</p><p><small>{__org__}</small></p><p><small>Este programa no brinda absolutamente ninguna garantia.<br>Ver la <a href='https://www.gnu.org/licenses/gpl-3.0.html'>licencia GPL version 2 o superior</a> para mas informacion</small></p></center>")
         msgBox.open()
 
     def showTutorial(self):
