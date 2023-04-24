@@ -240,7 +240,7 @@ class QtImageViewer(QGraphicsView):
             self.clearImage()
         image = QImage(str(filepath))
         self.setImage(image)
-        self.imageChanged.emit(filepath.name)
+        self.imageChanged.emit(str(filepath))
 
     def updateViewer(self):
         """ Show current zoom (if showing entire image, apply current aspect ratio mode).

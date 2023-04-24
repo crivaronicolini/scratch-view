@@ -115,6 +115,7 @@ class MainWindow(QMainWindow):
         fileMenu.addSeparator()
         fileMenu.addAction(self.saveAction)
         fileMenu.addAction(self.saveAsAction)
+        fileMenu.addAction(self.exportLinesAction)
         # Img menu
         imgMenu = menuBar.addMenu("Imagen")
         imgMenu.addAction(self.newStitchAction)
@@ -142,6 +143,14 @@ class MainWindow(QMainWindow):
         self.saveAsAction.triggered.connect(self.saveAs)
         self.saveAsAction.setDisabled(True)
 
+        self.exportLinesAction = QAction("Exportar lineas", self)
+        self.exportLinesAction.triggered.connect(self.exportLines)
+        self.exportLinesAction.setDisabled(True)
+        self.plot.lineAdded.connect(
+            lambda: self.exportLinesAction.setDisabled(False))
+        self.plot.lineAdded.connect(
+            lambda: self.saveAsAction.setDisabled(False))
+
         self.newStitchAction = QAction("Juntar imagenes", self)
         self.newStitchAction.triggered.connect(self.juntarImagenes)
 
@@ -163,8 +172,6 @@ class MainWindow(QMainWindow):
         self.viewer.imageChanged.connect(self.setTitle)
         self.viewer.imageChanged.connect(
             lambda: self.enableSetZeroAction.setDisabled(False))
-        self.viewer.imageChanged.connect(
-            lambda: self.saveAsAction.setDisabled(False))
 
         self.setScaleAction = QAction("Cambiar escala", self)
         self.setScaleAction.triggered.connect(lambda: ScaleDialog(self))
@@ -227,7 +234,8 @@ class MainWindow(QMainWindow):
         return round(self.scaleCurrentValue * x), round(self.scaleCurrentValue * y)
 
     def setTitle(self, title):
-        self.label.setText(title)
+        self.imgPath = Path(title)
+        self.label.setText(self.imgPath.name)
 
     def _whichFiji(self):
         p = platform.system()
@@ -376,6 +384,22 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Imagen guardada en {filepath}")
         self.saveAction.setDisabled(False)
 
+    def exportLines(self):
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Guardar lineas como", directory=self.lastDir, filter="Texto (*.txt *.md)")
+        if not filepath:
+            return
+        with open(filepath, 'w') as f:
+            p = self.plot.params
+            f.write('\n'.join([f"{self.imgPath.stem}", "",
+                               "x (um)\tFuerza (N)",
+                               *[f"{x}\t{f:.3f}" for x,
+                                   f in sorted(self.plot.lineasMarcadas)], "", "",
+                               f"fuerza inicial: {p['fin']}, fuerza final: {p['ffin']}, largo: {p['largo']}, velocidad: {p['vel']}, kP: {p['Kp']}, kI: {p['Ki']}, kD: {p['Kd']}",
+                               ]))
+        self.lastDir = str(Path(filepath).parent)
+        self.statusBar().showMessage(f"Lineas guardadas en {filepath}")
+
 
 class ScaleDialog(QDialog):
     def __init__(self, parent):
@@ -492,6 +516,7 @@ class ScaleDialog(QDialog):
 class Plot(QWidget):
 
     doubleClickAction = pyqtSignal(str)
+    lineAdded = pyqtSignal()
 
     def __init__(self, parent=None):
         super(Plot, self).__init__(parent)
@@ -552,6 +577,10 @@ class Plot(QWidget):
 
     def ajustardf(self):
         df = self.df
+        params = {}
+        params["fin"], params["ffin"],  params["largo"], params["vel"], params["Kp"], params["Ki"], params["Kd"], * \
+            _ = df.iloc[0].to_list()
+        self.params = params
         # TODO setear escala bien
         if df.x.mean() < -1:
             df.x = - df.x
@@ -599,6 +628,7 @@ class Plot(QWidget):
             self.line.set(ls=":", color="gray", alpha=0.5)
             self.lines.append(self.line)
             self.line = None
+            self.lineAdded.emit()
 
     def mousePressEvent(self, event):
         if self.ax.get_navigate_mode() != None:
@@ -708,7 +738,7 @@ if __name__ == '__main__':
     # Load an image file to be displayed (will popup a file dialog).
     img = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/5-60.jpg"
     csv = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/M1402_5-60_1.csv"
-    # mainwindow.open([Path(img), Path(csv)])
+    mainwindow.open([Path(img), Path(csv)])
 
     # Handle left mouse clicks with your own custom slot
     # handleLeftClick(x, y). (x, y) are image coordinates.
