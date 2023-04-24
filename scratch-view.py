@@ -20,7 +20,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolb
 from matplotlib.backend_tools import Cursors
 
 from PyQt6.QtCore import Qt, QPoint, QPointF, pyqtSignal, QSize, QProcess, QSettings
-from PyQt6.QtGui import QAction, QColor, QIcon
+from PyQt6.QtGui import QAction, QColor, QIcon, QImage, QPainter
 from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QLabel, QMessageBox, QPushButton, QDialog, QRadioButton, QButtonGroup, QDialogButtonBox, QFormLayout, QLineEdit
 from QtImageViewer import QtImageViewer
 
@@ -81,6 +81,10 @@ class MainWindow(QMainWindow):
 
         self.filetypes = self.imgFiletypes + self.dataFiletypes
 
+        self.imgFileFilter = " ".join(["*" + s for s in self.imgFiletypes])
+        self.dataFileFilter = " ".join(["*" + s for s in self.dataFiletypes])
+        self.fileFilter = self.imgFileFilter + " " + self.dataFileFilter
+
         self.scales = {'olympus': 0.44}
         self.scaleCurrentName = 'olympus'
         self.scaleCurrentValue = 0.44
@@ -108,6 +112,9 @@ class MainWindow(QMainWindow):
         # File menu
         fileMenu = menuBar.addMenu("Archivo")
         fileMenu.addAction(self.newFileAction)
+        fileMenu.addSeparator()
+        fileMenu.addAction(self.saveAction)
+        fileMenu.addAction(self.saveAsAction)
         # Img menu
         imgMenu = menuBar.addMenu("Imagen")
         imgMenu.addAction(self.newStitchAction)
@@ -124,8 +131,16 @@ class MainWindow(QMainWindow):
         mainToolBar.addAction(self.enableMarcarLineaAction)
 
     def _createActions(self):
-        self.newFileAction = QAction("Abrir archivos", self)
+        self.newFileAction = QAction("Abrir", self)
         self.newFileAction.triggered.connect(self.open)
+
+        self.saveAction = QAction("Guardar", self)
+        self.saveAction.triggered.connect(self.save)
+        self.saveAction.setDisabled(True)
+
+        self.saveAsAction = QAction("Guardar como", self)
+        self.saveAsAction.triggered.connect(self.saveAs)
+        self.saveAsAction.setDisabled(True)
 
         self.newStitchAction = QAction("Juntar imagenes", self)
         self.newStitchAction.triggered.connect(self.juntarImagenes)
@@ -134,6 +149,7 @@ class MainWindow(QMainWindow):
         self.enableSetZeroAction.setToolTip(
             "Click derecho para definir el origen.")
         self.enableSetZeroAction.setCheckable(True)
+        self.enableSetZeroAction.setDisabled(True)
         self.enableSetZeroAction.toggled.connect(self.enableSetZero)
 
         self.enableMarcarLineaAction = QAction("Marcar linea", self)
@@ -144,7 +160,11 @@ class MainWindow(QMainWindow):
         self.enableMarcarLineaAction.setDisabled(True)
 
         self.viewer.mousePositionOnImageChanged.connect(self.printPos)
-        self.viewer.setTitleAction.connect(self.setTitle)
+        self.viewer.imageChanged.connect(self.setTitle)
+        self.viewer.imageChanged.connect(
+            lambda: self.enableSetZeroAction.setDisabled(False))
+        self.viewer.imageChanged.connect(
+            lambda: self.saveAsAction.setDisabled(False))
 
         self.setScaleAction = QAction("Cambiar escala", self)
         self.setScaleAction.triggered.connect(lambda: ScaleDialog(self))
@@ -269,7 +289,9 @@ class MainWindow(QMainWindow):
         """Abre lista de archivos, o abre un seleccionador de archivos"""
         if not filepaths:
             filepaths, _ = QFileDialog.getOpenFileNames(
-                self, caption="Abrir imagen y csv", directory=self.lastDir, filter="(*.jpg *.bmp *.png *.csv *.tsv)")
+                self, caption="Abrir imagen y csv", directory=self.lastDir, filter=self.fileFilter)
+            if not filepaths:
+                return
             filepaths = [Path(filepath).resolve() for filepath in filepaths]
         elif not isinstance(filepaths, list):
             filepaths = [filepaths]
@@ -333,6 +355,26 @@ class MainWindow(QMainWindow):
 
     def showTutorial(self):
         pass
+
+    def save(self):
+        self.saveAs(filepath=self.savedFilepath)
+
+    def saveAs(self, filepath=None):
+        if not filepath:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self, "Guardar imagen como", directory=self.lastDir, filter=self.imgFileFilter)
+            if not filepath:
+                return
+        self.savedFilepath = filepath
+        image = QImage(self.viewer._image.width, self.viewer._image.height,
+                       QImage.Format.Format_ARGB32_Premultiplied)
+        painter = QPainter(image)
+        self.viewer.scene.render(painter)
+        painter.end()
+        image.save(filepath)
+        self.lastDir = str(Path(filepath).parent)
+        self.statusBar().showMessage(f"Imagen guardada en {filepath}")
+        self.saveAction.setDisabled(False)
 
 
 class ScaleDialog(QDialog):
@@ -498,6 +540,8 @@ class Plot(QWidget):
             if not filepath:
                 filepath, _ = QFileDialog.getOpenFileName(
                     self, "Abrir csv", "", "Spreadsheet files (*.csv *.tsv *.xlx)")
+                if not filepath:
+                    return
                 filepath = Path(filepath).resolve()
             self.df = pd.read_csv(filepath)
             title = filepath.name

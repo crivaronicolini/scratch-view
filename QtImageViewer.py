@@ -5,6 +5,8 @@ Modified by Marco Crivaro Nicolini, 2023
 Licence at the end of the file.
 """
 
+from pathlib import Path
+
 from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
 from PyQt6.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPen
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QGraphicsProxyWidget
@@ -78,7 +80,7 @@ class QtImageViewer(QGraphicsView):
     # Emit index of selected ROI
     roiSelected = pyqtSignal(int)
 
-    setTitleAction = pyqtSignal(str)
+    imageChanged = pyqtSignal(str)
 
     def __init__(self):
         QGraphicsView.__init__(self)
@@ -238,10 +240,7 @@ class QtImageViewer(QGraphicsView):
             self.clearImage()
         image = QImage(str(filepath))
         self.setImage(image)
-        self.setTitle(filepath.name)
-
-    def setTitle(self, title):
-        self.setTitleAction.emit(title)
+        self.imageChanged.emit(filepath.name)
 
     def updateViewer(self):
         """ Show current zoom (if showing entire image, apply current aspect ratio mode).
@@ -662,8 +661,7 @@ class LineROI(QGraphicsLineItem):
     def __init__(self, viewer):
         QGraphicsItem.__init__(self)
         self._viewer = viewer
-        pen = QPen(Qt.GlobalColor.yellow)
-        pen.setCosmetic(True)
+        pen = QPen(Qt.GlobalColor.yellow, 4)
         self.setPen(pen)
         self.setFlags(self.GraphicsItemFlag.ItemIsSelectable)
 
