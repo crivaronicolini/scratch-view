@@ -326,7 +326,7 @@ class MainWindow(QMainWindow):
         msgBox.setWindowTitle("Sobre Scratch View")
         msgBox.setTextFormat(Qt.TextFormat(Qt.TextFormat.RichText))
         msgBox.setText(
-            f"<center><p><img src='icone128.png' width=128></img></p><h3>Scratch View    </h3></center>")
+            f"<center><p><img src='iconf128.png' width=128></img></p><h3>Scratch View    </h3></center>")
         msgBox.setInformativeText(
             f"<center><p>{__version__}</p><p>Analiza ensayos de rayado</p><p><a href='{__website__}'>Web</a></p><p>{__author__}, {__year__}</p><p><small>{__org__}</small></p><p><small>Este programa no brinda absolutamente ninguna garantia.<br>Ver la <a href='https://www.gnu.org/licenses/gpl-3.0.html'>licencia GPL version 2 o superior</a> para mas informacion</small></p></center>")
         msgBox.open()
