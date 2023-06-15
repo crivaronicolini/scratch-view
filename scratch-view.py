@@ -7,15 +7,18 @@ __version__ = 0.1
 __year__ = 2023
 __org__ = "INFINA, FCEN UBA"
 __website__ = 'https://github.com/crivaronicolini/scratch-view/'
+__appid__ = 'com.infina.scratch-view.0.1'
 
 from pathlib import Path
 import platform
 import traceback
+import sys, os
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
+from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backend_tools import Cursors
 
@@ -24,6 +27,13 @@ from PyQt6.QtGui import QAction, QColor, QIcon, QImage, QPainter
 from PyQt6.QtWidgets import QToolBar, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QLabel, QMessageBox, QPushButton, QDialog, QRadioButton, QButtonGroup, QDialogButtonBox, QFormLayout, QLineEdit
 from QtImageViewer import QtImageViewer
 
+# https://www.pythonguis.com/tutorials/packaging-pyside6-applications-windows-pyinstaller-installforge/
+basedir = os.path.dirname(__file__)
+try:
+    from ctypes import windll  # Only exists on Windows.
+    windll.shell32.SetCurrentProcessExplicitAppUserModelID(__appid__)
+except ImportError:
+    pass
 
 def errorDialog(parent, title, message):
     print(message)
@@ -34,12 +44,10 @@ def errorDialog(parent, title, message):
 class MainWindow(QMainWindow):
     def __init__(self, ):
         QMainWindow.__init__(self)
-        self.icon = QIcon()
-        self.icon.addFile('iconf512.svg', QSize(512, 512))
-        self.setWindowIcon(self.icon)
+        self.setWindowIcon(QIcon(os.path.join(basedir, "icons", "scratch-view.ico")))
         self.setWindowTitle("Scratch View")
         self.viewer = QtImageViewer()
-        self.plot = Plot()
+        self.plot = Plot(self)
         self.label = QLabel('')
         f = self.label.font()
         f.setPointSize(15)
@@ -62,7 +70,6 @@ class MainWindow(QMainWindow):
 
         # Status Bar
         self.status = self.statusBar()
-        self.status.showMessage("Data loaded and plotted")
 
         self.setAcceptDrops(True)
         self.viewer.setAcceptDrops(True)
@@ -635,8 +642,6 @@ class Plot(QWidget):
             return
         if not event.inaxes:
             return
-        if event.inaxes != self.ax:
-            return
         if self.start:
             return
         self.point = event.xdata
@@ -646,8 +651,6 @@ class Plot(QWidget):
         if self.ax.get_navigate_mode() != None:
             return
         if not event.inaxes:
-            return
-        if event.inaxes != self.ax:
             return
         if self.cursorOnLine:
             self.lines.pop(self.closestLineIdx).remove()
@@ -664,12 +667,8 @@ class Plot(QWidget):
     def mouseMoveEvent(self, event):
         if self.ax.get_navigate_mode() != None:
             return
-        if not event.inaxes:
-            return
-        # if not self.pressed:
-        #     return
         if self.lineasMarcadasX:
-            if np.min(m := np.abs(int(event.xdata) - self.lineasMarcadasXnp)) < 20:
+            if np.min(m := np.abs(event.x - self.lineasMarcadasXnp)) < 20:
                 self.closestLineIdx = np.argmin(m)
                 self.figureCanvas.set_cursor(Cursors.HAND)
                 self.cursorOnLine = True
@@ -682,6 +681,13 @@ if __name__ == '__main__':
     import sys
     from PyQt6.QtWidgets import QApplication
 
+    # Create the QApplication.
+    app = QApplication(sys.argv)
+    #
+    # Create an image viewer widget.
+    mainwindow = MainWindow()
+    viewer = mainwindow.viewer
+
     def my_exception_hook(exctype, value, traceback):
         # Print the error and traceback
         print(exctype, value, traceback)
@@ -690,18 +696,8 @@ if __name__ == '__main__':
         sys._excepthook(exctype, value, traceback)
         sys.exit(1)
 
-    # Back up the reference to the exceptionhook
-    sys._excepthook = sys.excepthook
-
     # Set the exception hook to our wrapping function
     sys.excepthook = my_exception_hook
-
-    # Create the QApplication.
-    app = QApplication(sys.argv)
-    #
-    # Create an image viewer widget.
-    mainwindow = MainWindow()
-    viewer = mainwindow.viewer
 
     # Set viewer's aspect ratio mode.
     # !!! ONLY applies to full image view.

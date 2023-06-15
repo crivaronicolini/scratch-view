@@ -8,7 +8,7 @@ a = Analysis(
     ['scratch-view.py'],
     pathex=[],
     binaries=[],
-    datas=[('iconf128.png', '.'), ('iconf512.svg', '.')],
+    datas=[('icons', 'icons')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
