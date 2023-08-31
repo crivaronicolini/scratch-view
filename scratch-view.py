@@ -12,7 +12,8 @@ __appid__ = 'com.infina.scratch-view.0.1'
 from pathlib import Path
 import platform
 import traceback
-import sys, os
+import sys
+import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -35,6 +36,7 @@ try:
 except ImportError:
     pass
 
+
 def errorDialog(parent, title, message):
     print(message)
     QMessageBox.critical(parent, str(title), message)
@@ -44,7 +46,8 @@ def errorDialog(parent, title, message):
 class MainWindow(QMainWindow):
     def __init__(self, ):
         QMainWindow.__init__(self)
-        self.setWindowIcon(QIcon(os.path.join(basedir, "icons", "scratch-view.ico")))
+        self.setWindowIcon(
+            QIcon(os.path.join(basedir, "data", "scratch-view.ico")))
         self.setWindowTitle("Scratch View")
         self.viewer = QtImageViewer()
         self.plot = Plot(self)
@@ -522,10 +525,23 @@ class ScaleDialog(QDialog):
 
 class Plot(QWidget):
 
+    # doubleClickAction = Signal(str)
+    # lineAdded = Signal()
     doubleClickAction = pyqtSignal(str)
     lineAdded = pyqtSignal()
 
     def __init__(self, parent=None):
+        # # super().__init__(parent)
+        # # super(Plot, self).__init__(parent)
+        # self._main = QtWidgets.QWidget()
+        # self.figure = Figure()
+        # self.figureCanvas = FigureCanvas(self.figure)
+        # self.navigationToolbar = NavigationToolbar(
+        #     self.figureCanvas, self._main)
+        #
+        # layout = QVBoxLayout()
+        # # layout.addWidget(self.navigationToolbar)
+
         super(Plot, self).__init__(parent)
 
         self.figure = plt.figure()
@@ -730,11 +746,6 @@ if __name__ == '__main__':
 
     # Allow panning with the middle mouse button.
     viewer.panButton = Qt.MouseButton.LeftButton  # set to None to disable
-
-    # Load an image file to be displayed (will popup a file dialog).
-    img = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/5-60.jpg"
-    csv = "/home/marco/documents/fac/tesis2/ensayos2/CrCrN/M1402C/scratch/M1402_5-60_1.csv"
-    mainwindow.open([Path(img), Path(csv)])
 
     # Handle left mouse clicks with your own custom slot
     # handleLeftClick(x, y). (x, y) are image coordinates.

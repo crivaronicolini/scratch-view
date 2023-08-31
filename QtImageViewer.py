@@ -7,6 +7,10 @@ Licence at the end of the file.
 
 from pathlib import Path
 
+# from PySide6.QtCore import Qt, QRectF, QPoint, QPointF, Signal, QEvent, QSize
+# from PySide6.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPen
+# from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QGraphicsProxyWidget
+
 from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
 from PyQt6.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPen
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, QGraphicsProxyWidget
@@ -81,6 +85,27 @@ class QtImageViewer(QGraphicsView):
     roiSelected = pyqtSignal(int)
 
     imageChanged = pyqtSignal(str)
+
+    # leftMouseButtonPressed = Signal(float, float)
+    # leftMouseButtonReleased = Signal(float, float)
+    # middleMouseButtonPressed = Signal(float, float)
+    # middleMouseButtonReleased = Signal(float, float)
+    # rightMouseButtonPressed = Signal(float, float)
+    # rightMouseButtonReleased = Signal(float, float)
+    # leftMouseButtonDoubleClicked = Signal(float, float)
+    # rightMouseButtonDoubleClicked = Signal(float, float)
+    # # Emitted upon zooming/panning.
+    # viewChanged = Signal()
+    #
+    # # Emitted on mouse motion.
+    # # Emits mouse position over image in image pixel coordinates.
+    # # !!! setMouseTracking(True) if you want to use this at all times.
+    # mousePositionOnImageChanged = Signal(QPoint)
+    #
+    # # Emit index of selected ROI
+    # roiSelected = Signal(int)
+    #
+    # imageChanged = Signal(str)
 
     def __init__(self):
         QGraphicsView.__init__(self)
